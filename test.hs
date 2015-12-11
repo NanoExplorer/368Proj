@@ -15,6 +15,12 @@ Prelude> sequence_ [print i | i <- [1..10]]
 10
 Prelude> 
 
+
+
+Things implemented: *+-/ car cdr
+all of the lispval primitives but dottedlist, in show and eval
+
+
 -}
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
@@ -22,7 +28,6 @@ import Control.Monad
 import Numeric (readInt)
 import Data.Char (digitToInt)
 import Control.Monad.Error
-
 
 data LispVal = Atom String
              | List [LispVal]
@@ -32,15 +37,16 @@ data LispVal = Atom String
              | Lbool Bool
              | Lfloat Double --NYI
              | Lchar Char
+
 instance Show LispVal where show = showVal
 
 eval :: LispVal -> LispVal
-eval a@(Atom _)   = a
+eval a@(Atom _)    = a
 eval a@(Lstring _) = a
-eval a@(Lbool _)  = a
-eval a@(Number _) = a
-eval a@(Lfloat _) = a
-eval a@(Lchar _)  = a
+eval a@(Lbool _)   = a
+eval a@(Number _)  = a
+eval a@(Lfloat _)  = a
+eval a@(Lchar _)   = a
 eval (List [Atom "quote", val]) = val
 eval (List (Atom fun:args)) = apply fun $ map eval args
 
@@ -66,7 +72,7 @@ primitives = [("+", numericBinop (+)),
 
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
 lispCons :: [LispVal] -> LispVal
-lispCons (x:ys:[]) = List (x:ys)
+lispCons (x:(List ys):[]) = List (x:ys)
 lispCons _ = error "Contract Violation"
 
 lispCar :: [LispVal] -> LispVal
@@ -106,12 +112,14 @@ unpackNum _ = error "Not a number"
 showVal :: LispVal -> String
 showVal (Atom x) = x
 showVal (List x) = "(" ++ (showLispList x) ++ ")"
+showVal (DottedList head tail) = "(" ++ showLispList head ++ "." ++ showVal tail ")"
 showVal (Number x) = show x
 showVal (Lstring x) = "\"" ++ x ++ "\""
 showVal (Lbool True) = "#t"
 showVal (Lbool False) = "#f"
 showVal (Lfloat x) = show x
 showVal (Lchar x) = "#\\" ++ showLChar x
+
 
 showLChar :: Char -> String
 showLChar '\n' = "newline"
@@ -127,7 +135,7 @@ showLispList (x:xs) = showVal x ++ " " ++ showLispList xs
 main :: IO ()
 main = do x <- getLine
           if x == "(exit)"
-              then print "Exiting."
+              then putStrLn "Exiting."
               else rep x >> main
 --end--
 
@@ -221,3 +229,17 @@ parseQuoted = do
   char '\''
   x <- parseExpr
   return $ List [Atom "quote", x]
+
+
+{-
+(cons 'a '(a b c))
+(a a b c)
+
+(cons '(a b c) 'a)
+((a b c) . a)
+
+
+
+
+
+-}
