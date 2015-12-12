@@ -25,7 +25,7 @@ import Control.Monad.Error
 
 
 data LispVal = Atom String
-             | List [LispVal]
+             | Llist [LispVal]
              | DottedList [LispVal] LispVal --NYI
              | Number Integer
              | Lstring String
@@ -41,8 +41,8 @@ eval a@(Lbool _)  = a
 eval a@(Number _) = a
 eval a@(Lfloat _) = a
 eval a@(Lchar _)  = a
-eval (List [Atom "quote", val]) = val
-eval (List (Atom fun:args)) = apply fun $ map eval args
+eval (Llist [Atom "quote", val]) = val
+eval (Llist (Atom fun:args)) = apply fun $ map eval args
 
 apply :: String -> [LispVal] -> LispVal
 apply func args = maybe (error $ func ++ " is not a procedure") ($ args) $ lookup func primitives
@@ -52,6 +52,11 @@ primitives = [("+", numericBinop (+)),
               ("-", numericBinop (-)),
               ("*", numericBinop (*)),
               ("/", numericBinop div),
+              ("<", lispLessThan), --start new functions
+              (">", lispGreaterThan),
+              (">=", lispGtEqTo),
+              ("<=", lispLtEqTo),
+              ("equal?", lispEqualMa), --end new functions
               ("mod", numericBinop mod),
               ("quotient", numericBinop quot),
               ("remainder", numericBinop rem),
@@ -60,21 +65,19 @@ primitives = [("+", numericBinop (+)),
               ("symbol?",oneArg testSymbol),
               ("string?",oneArg testString),
               ("number?",oneArg testNumber),
+              --("char?",oneArg testChar),
               ("print", oneArg lispPrint),
-              ("list", List),
-              ("cons", lispCons)]
+              ("list", Llist),
+              ("cons", lispCons),
+              ("null?", lispNullMa)]
 
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
-lispCons :: [LispVal] -> LispVal
-lispCons (x:ys:[]) = List (x:ys)
-lispCons _ = error "Contract Violation"
-
 lispCar :: [LispVal] -> LispVal
-lispCar ((List (x:xs)):[]) = x
+lispCar ((Llist (x:xs)):[]) = x
 lispCar _ = error "Contract Violation"
 
 lispCdr :: [LispVal] -> LispVal
-lispCdr ((List (x:xs)):[]) = List xs
+lispCdr ((Llist (x:xs)):[]) = Llist xs
 lispCdr _ = error "Contract Violation"
 
 oneArg :: (LispVal -> LispVal) -> [LispVal] -> LispVal
@@ -93,6 +96,32 @@ testNumber _ = Lbool False
 
 lispPrint s = Lstring (showVal s)
 
+--A PRIORI CODE (David)--
+lispCons :: [LispVal] -> LispVal
+lispCons [x, Llist ys] = Llist $ x:ys
+lispCons _ = error "Contract Violation"
+
+lispNullMa :: [LispVal] -> LispVal
+lispNullMa [Llist []] = Lbool True
+lispNullMa _ = Lbool False
+
+lispLessThan :: [LispVal] -> LispVal
+lispLessThan [x, y] = Lbool $ (unpackNum x) < (unpackNum y)
+
+lispGreaterThan :: [LispVal] -> LispVal
+lispGreaterThan [x, y] = Lbool $ (unpackNum x) > (unpackNum y)
+
+lispGtEqTo :: [LispVal] -> LispVal
+lispGtEqTo [x, y] = Lbool $ (unpackNum x) >= (unpackNum y)
+
+lispLtEqTo :: [LispVal] -> LispVal
+lispLtEqTo [x, y] = Lbool $ (unpackNum x) <= (unpackNum y)
+
+lispEqualMa :: [LispVal] -> LispVal
+lispEqualMa [(Number x), (Number y)] = Lbool $ x == y
+lispEqualMa [_, _] = Lbool False --temporary fix to compile
+
+--lispDefine :: 
 
 --END A PRIORI CODE--
 
@@ -105,7 +134,7 @@ unpackNum _ = error "Not a number"
 
 showVal :: LispVal -> String
 showVal (Atom x) = x
-showVal (List x) = "(" ++ (showLispList x) ++ ")"
+showVal (Llist x) = "(" ++ (showLispList x) ++ ")"
 showVal (Number x) = show x
 showVal (Lstring x) = "\"" ++ x ++ "\""
 showVal (Lbool True) = "#t"
@@ -214,10 +243,10 @@ parseNumber'' = (many1 digit) >>= \x -> (return . Number . read) x
 
 
 parseList :: Parser LispVal
-parseList = liftM List $ sepBy parseExpr spaces
+parseList = liftM Llist $ sepBy parseExpr spaces
 
 parseQuoted :: Parser LispVal
 parseQuoted = do
   char '\''
   x <- parseExpr
-  return $ List [Atom "quote", x]
+  return $ Llist [Atom "quote", x]
