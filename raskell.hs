@@ -36,7 +36,7 @@ data LispVal = Atom String
              | Lstring String
              | Lbool Bool
              | Lfloat Double --NYI
-             | Lchar Char
+             | CHARizard Char
 
 instance Show LispVal where show = showVal
 
@@ -46,7 +46,7 @@ eval a@(Lstring _) = a
 eval a@(Lbool _)   = a
 eval a@(Number _)  = a
 eval a@(Lfloat _)  = a
-eval a@(Lchar _)   = a
+eval a@(CHARizard _)   = a
 eval (Llist [Atom "quote", val]) = val
 eval (Llist (Atom fun:args)) = apply fun $ map eval args
 
@@ -126,10 +126,10 @@ lispLtEqTo :: [LispVal] -> LispVal
 lispLtEqTo [x, y] = Lbool $ (unpackNum x) <= (unpackNum y)
 
 lispEqualMa :: [LispVal] -> LispVal
-lispEqualMa [(Number x), (Number y)] = Lbool $ x == y
-lispEqualMa [_, _] = Lbool False --temporary fix to compile
-
---lispDefine :: 
+lispEqualMa [(Number x), (Number y)]         = Lbool $ x == y
+lispEqualMa [(CHARizard x), (CHARizard y)]   = Lbool $ x == y
+--lispEqualMa [Llist (x:xs), Llist (y:ys)] = Lbool $ (x == y) && (unpackBool $ lispEqualMa [(Llist xs),(Llist ys)])
+lispEqualMa _ = error "Contract Violation"
 
 --END A PRIORI CODE--
 
@@ -140,16 +140,23 @@ unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
 unpackNum _ = error "Not a number"
 
+--BEGIN A PRIORI CODE: David
+unpackBool :: LispVal -> Bool
+unpackBool (Lbool b) = b
+unpackBool _ = error "Not a boolean"
+
+--END A PRIORI CODE: David
+
 showVal :: LispVal -> String
 showVal (Atom x) = x
 showVal (Llist x) = "(" ++ (showLispList x) ++ ")"
-showVal (DottedList head tail) = "(" ++ showLispList head ++ "." ++ showVal tail ")"
+showVal (DottedList head tail) = "(" ++ showLispList head ++ "." ++ showVal tail ++ ")"
 showVal (Number x) = show x
 showVal (Lstring x) = "\"" ++ x ++ "\""
 showVal (Lbool True) = "#t"
 showVal (Lbool False) = "#f"
 showVal (Lfloat x) = show x
-showVal (Lchar x) = "#\\" ++ showLChar x
+showVal (CHARizard x) = "#\\" ++ showLChar x
 
 
 showLChar :: Char -> String
@@ -211,9 +218,9 @@ processChar = do char '\\'
                             notFollowedBy alphaNum
                             return [x]
                  return $ case x of
-                          "newline" -> Lchar '\n'
-                          "space"   -> Lchar ' '
-                          _         -> Lchar (x !! 0)
+                          "newline" -> CHARizard '\n'
+                          "space"   -> CHARizard ' '
+                          _         -> CHARizard (x !! 0)
 
 parseString :: Parser LispVal
 parseString = do
