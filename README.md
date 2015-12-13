@@ -28,3 +28,6 @@ Full feature list:
  * `quote`
  * `cond`
  * `if`
+
+Credit where credit is due: We had a lot of help and inspiration from the following site: https://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours
+Because of the nature of this project as a final assignment for a class, much care was taken to indicate when we were working without help from the website. It ended up requiring a lot of modifications anyway because we skipped some steps (like error handling and building a "proper" REPL)
