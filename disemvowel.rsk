@@ -1,0 +1,19 @@
+(define t #t)
+(define nil #f)
+
+(define vowelguts 
+  (lambda (x) 
+    (cond ((null? x) '())
+          ((vowelp (car x) (string->list "aeiouAEIOU")) (vowelguts (cdr x))) 
+          (t (cons (car x) (vowelguts (cdr x)))))))
+          
+(define disemvowel 
+  (lambda (x)
+    (cond ((list? x) (vowelguts x))
+          (t (list->string (vowelguts (string->list x)))))))
+
+(define vowelp 
+  (lambda (x vowels)
+    (cond ((null? vowels) nil)
+          ((equal? x (car vowels)) t)
+          (t (vowelp x (cdr vowels))))))

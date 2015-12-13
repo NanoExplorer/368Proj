@@ -1,0 +1,11 @@
+(define timesdepth* 
+  (lambda (mult list)
+    (cond
+      ((number? list) (* (- mult 1) list))
+      ((null? list) '())
+      ((list? (car list)) (cons 
+                           (timesdepth* (+ 1 mult) (car list)) 
+                           (timesdepth* mult (cdr list))))
+      (else (cons 
+             (* mult (car list)) 
+             (timesdepth* mult (cdr list)))))))
