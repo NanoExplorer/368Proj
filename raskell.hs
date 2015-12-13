@@ -26,7 +26,7 @@ import Control.Monad
 import Numeric (readInt)
 import Data.Char (digitToInt)
 import Data.IORef
-import Debug.Trace
+
 
 data LispVal = Atom String
              | Llist [LispVal]
@@ -237,7 +237,7 @@ unpackBool _ = error "Not a boolean"
 
 unpackChar :: LispVal -> Char 
 unpackChar (CHARizard c) = c
-unpackChar badThings = traceShow badThings $ error "Not a char"
+unpackChar badThings =  error $ "Not a char: " ++ (show badThings)
 
 unpackString :: LispVal -> String
 unpackString (Lstring s) = s
