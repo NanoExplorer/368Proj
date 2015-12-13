@@ -150,14 +150,14 @@ testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
 
 
---This lispCond implementation was not totally without the source material
-lispCond :: [LispVal] -> Env -> IO LispVal
-lispCond env ((Llist (Atom "else" : value : [])) : []) = eval value
+--This lispCond implementation was not totally without the source material !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+lispCond :: Env -> [LispVal] -> IO LispVal
+lispCond env ((Llist (Atom "else" : value : [])) : []) = eval env value
 lispCond env ((Llist (condition : value : [])) : alts) = do
-     result <- eval condition
-     if (unpackBool result) then eval value
-                   else lispCond alts
-lispCond _ = error "No viable alternative in cond"
+     result <- eval env condition
+     if (unpackBool result) then eval env value
+                   else lispCond env alts
+lispCond _ _ = error "No viable alternative in cond"
 
 
 comparisonOps :: (Integer -> Integer -> Bool) -> [LispVal] -> LispVal
