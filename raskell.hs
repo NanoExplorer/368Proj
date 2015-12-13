@@ -27,6 +27,7 @@ import Numeric (readInt)
 import Data.Char (digitToInt)
 import Data.IORef
 
+
 data LispVal = Atom String
              | Llist [LispVal]
              | DottedList [LispVal] LispVal --NYI
@@ -51,6 +52,7 @@ eval _ a@(CHARizard _)   = return a
 eval env (Llist [Atom "define", Atom var, value]) = eval env value >>= defineVar env var 
 eval env (Llist [Atom "set!", Atom var, value])   = eval env value >>= setVar env var 
 eval env (Llist [Atom "quote", val]) = return val
+eval env (Llist (Atom "cond" : alts)) = lispCond env alts
 eval env (Llist [Atom "if", pred, conseq, alt]) =
      do result <- eval env pred
         case result of
@@ -103,7 +105,7 @@ primitives = [("+", numericBinop (+)),
               ("string?",oneArg testString),
               ("number?",oneArg testNumber),
               ("char?",oneArg testChar),
-              ("print", oneArg lispPrint), --nyi
+              ("print", oneArg lispPrint),
               ("list", Llist),
               ("cons", lispCons),
               ("null?",oneArg testNull),
@@ -118,7 +120,6 @@ setVar envRef var value = do env <- readIORef envRef
                                    (flip writeIORef value)
                                    (lookup var env)
                              return value
---So the IO LispVal that this function spits out is just the LispVal that you put in.
 
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
 
@@ -139,7 +140,7 @@ varExists env name = readIORef env >>= return . maybe False (const True) . looku
 --argument and always returns that value -> const = \x y -> x so (const True) = \y -> True
 
 getVar :: Env -> String -> IO LispVal
-getVar env name = readIORef env >>=  maybe (error "No such variable") (readIORef) . lookup name
+getVar env name = readIORef env >>=  maybe (error $ "No such variable" ++ name) (readIORef) . lookup name
 
 
 --Based heavily on setVar, but without looking at recommended defineVar definitions
@@ -167,7 +168,7 @@ oneArg :: (LispVal -> LispVal) -> [LispVal] -> LispVal
 oneArg func (x:[]) = func x
 oneArg _ _ = error "Too many arguments"
 
-testSymbol, testString, testNumber, lispPrint :: LispVal -> LispVal
+testSymbol, testString, testNumber :: LispVal -> LispVal
 testSymbol (Atom _) = Lbool True
 testSymbol _ = Lbool False
 
@@ -191,6 +192,17 @@ testNull _ = Lbool False
 testChar :: LispVal -> LispVal
 testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
+
+
+--This lispCond implementation was not totally without the source material !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+lispCond :: Env -> [LispVal] -> IO LispVal
+lispCond env ((Llist (Atom "else" : value : [])) : []) = eval env value
+lispCond env ((Llist (condition : value : [])) : alts) = do
+     result <- eval env condition
+     if (unpackBool result) then eval env value
+                   else lispCond env alts
+lispCond _ _ = error "No viable alternative in cond"
+
 
 comparisonOps :: (Integer -> Integer -> Bool) -> [LispVal] -> LispVal
 comparisonOps op [(Number x), (Number y)] = Lbool $ x `op` y
@@ -223,9 +235,9 @@ unpackBool :: LispVal -> Bool
 unpackBool (Lbool b) = b
 unpackBool _ = error "Not a boolean"
 
-unpackChar :: LispVal -> Char
+unpackChar :: LispVal -> Char 
 unpackChar (CHARizard c) = c
-unpackChar _ = error "Not a char"
+unpackChar badThings =  error $ "Not a char: " ++ (show badThings)
 
 unpackString :: LispVal -> String
 unpackString (Lstring s) = s
@@ -251,19 +263,33 @@ showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
           Nothing -> ""
           Just arg -> " . " ++ arg) ++ ") ...)"
 
-
 showLChar :: Char -> String
 showLChar '\n' = "newline"
 showLChar ' '  = "space"
 showLChar x = [x]
 
 showLispList :: [LispVal] -> String
+showLispList [] = "()"
 showLispList (x:[]) = showVal x
 showLispList (x:xs) = showVal x ++ " " ++ showLispList xs
 --showLispList = unwords . map showVal is their implementation. I did it this way.
 
 main :: IO ()
-main = runRepl
+main = do args <- getArgs
+          case length args of 
+             0 -> runRepl
+             1 -> loadRun $ args !! 0
+             otherwise -> putStrLn "Invalid number of arguments"
+
+loadRun :: String -> IO()
+loadRun filename = do 
+  handle <- openFile filename ReadMode
+  contents <- hGetContents handle
+  env <- newEnv
+  rep env contents
+  hClose handle
+  until_ (=="(exit)") (readPrompt "Lisp>>> ") (rep env)
+  return ()
 
 nullEnv :: IO Env
 nullEnv = newIORef []
@@ -284,19 +310,24 @@ until_ pred prompt action = do
      else action result >> until_ pred prompt action
 
 rep :: Env -> String -> IO()
-rep env command = liftM show (eval env $ readExpr command) >>= putStrLn
+rep env command = sequence (map ((liftM show) . (eval env)) (readExpr command)) >>= (\x -> sequence_ [putStrLn i | i<-x])
 
+--rep _ command = print $ readExpr command 
+--parser debug
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
-readExpr :: String -> LispVal
-readExpr input = case parse parseExpr "lisp" input of
-    Left err -> Lstring $ "No match: " ++ show err
+readExpr :: String -> [LispVal]
+readExpr input = case parse parseManyExpr "lisp" input of
+    Left err -> [Lstring $ "No match: " ++ show err]
     Right val -> val
 
 spaces :: Parser ()
-spaces = skipMany1 space
+spaces = skipMany1 (space <|> newline <|> tab)
 
+parseManyExpr :: Parser [LispVal]
+parseManyExpr = sepBy parseExpr spaces
+ 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
     <|> parseString
