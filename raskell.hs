@@ -35,6 +35,9 @@ data LispVal = Atom String
              | Lbool Bool
              | Lfloat Double --NYI
              | CHARizard Char
+             | PrimitiveFunc ([LispVal] -> LispVal)
+             | Func { params :: [String], vararg :: (Maybe String),
+                      body :: [LispVal], closure :: Env }
 
 instance Show LispVal where show = showVal
 
@@ -45,8 +48,8 @@ eval _ a@(Lbool _)       = return a
 eval _ a@(Number _)      = return a
 eval _ a@(Lfloat _)      = return a
 eval _ a@(CHARizard _)   = return a
-eval env (Llist [Atom "define", Atom var, value]) = defineVar env var value
-eval env (Llist [Atom "set!", Atom var, value])   = setVar env var value
+eval env (Llist [Atom "define", Atom var, value]) = eval env value >>= defineVar env var 
+eval env (Llist [Atom "set!", Atom var, value])   = eval env value >>= setVar env var 
 eval env (Llist [Atom "quote", val]) = return val
 eval env (Llist [Atom "cond", Llist alts]) = lispCond env alts
 eval env (Llist [Atom "if", pred, conseq, alt]) =
@@ -54,9 +57,33 @@ eval env (Llist [Atom "if", pred, conseq, alt]) =
         case result of
           Lbool False -> eval env alt
           otherwise -> eval env conseq
-eval env (Llist (Atom fun:args)) = mapM (eval env) args >>= \x -> return (apply fun x)
-apply :: String -> [LispVal] -> LispVal
-apply func args = maybe (error $ func ++ " is not a procedure") ($ args) $ lookup func primitives
+eval env (Llist (Atom "lambda" : Llist params : funbody)) = return $ Func (map showVal params) Nothing funbody env
+
+eval env (Llist (fun:args)) = do 
+        func <- eval env fun
+        argVals <- mapM (eval env) args 
+        apply func argVals
+
+apply :: LispVal -> [LispVal] -> IO LispVal
+apply (PrimitiveFunc func) args = return $ func args
+apply (Func params varargs body closure) args = 
+      if num params /= num args && varargs == Nothing
+         then error "Wrong number of arguments"
+         else bindVars closure (zip params args) >>= bindVarArgs varargs >>= evalBody
+      where remainingArgs = drop (length params) args
+            num = toInteger . length
+            evalBody env = liftM last $ mapM (eval env) body
+            bindVarArgs arg env = case arg of
+                                    Just argName -> bindVars env [(argName, Llist $ remainingArgs)]
+                                    Nothing -> return env
+
+
+bindVars :: Env -> [(String,LispVal)] -> IO Env
+bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
+    where extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
+          addBinding (var, value) = do ref <- newIORef value
+                                       return (var,ref)
+
 
 primitives :: [(String, [LispVal] -> LispVal)]
 primitives = [("+", numericBinop (+)),
@@ -80,7 +107,10 @@ primitives = [("+", numericBinop (+)),
               ("print", oneArg lispPrint),
               ("list", Llist),
               ("cons", lispCons),
-              ("null?",oneArg testNull)]
+              ("null?",oneArg testNull),
+              ("list?",oneArg testList),
+              ("string->list", oneArg stringlist),
+              ("list->string", oneArg liststring)]
 
 type Env = IORef [(String, IORef LispVal)] --maps strings (variable names) to a "mutable-ish" LispVal
 setVar :: Env -> String -> LispVal -> IO LispVal 
@@ -93,6 +123,17 @@ setVar envRef var value = do env <- readIORef envRef
 
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
 
+testList, stringlist, liststring :: LispVal -> LispVal
+testList (Llist _) = Lbool True
+testList _ = Lbool False
+
+
+stringlist (Lstring x) = Llist $ map CHARizard x
+stringlist _ = error "contract violation"
+
+liststring (Llist x) = Lstring $ map unpackChar x
+liststring _ = error "contract violation"
+
 varExists :: Env -> String -> IO Bool
 varExists env name = readIORef env >>= return . maybe False (const True) . lookup name
 --here I got the const function from the wikibook. Apparently it makes any value into a function that takes one
@@ -100,7 +141,7 @@ varExists env name = readIORef env >>= return . maybe False (const True) . looku
 
 getVar :: Env -> String -> IO LispVal
 getVar env name = readIORef env >>=  maybe (error "No such variable") (readIORef) . lookup name
---I got the liftIO part from the textbook
+
 
 --Based heavily on setVar, but without looking at recommended defineVar definitions
 defineVar :: Env -> String -> LispVal -> IO LispVal --I got the type signature from the book
@@ -110,7 +151,10 @@ defineVar envRef name value = do env <- readIORef envRef
                                        (flip writeIORef value)
                                        (lookup name env)
                                  return value
-         
+newEnv :: IO Env
+newEnv = do x <- nullEnv
+            bindVars x $ map (\(x, y) -> (x, PrimitiveFunc y)) primitives
+          
 
 lispCar :: [LispVal] -> LispVal
 lispCar ((Llist (x:xs)):[]) = x
@@ -212,6 +256,12 @@ showVal (Lbool True) = "#t"
 showVal (Lbool False) = "#f"
 showVal (Lfloat x) = show x
 showVal (CHARizard x) = "#\\" ++ showLChar x
+showVal (PrimitiveFunc _) = "<primitive>"
+showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
+    "(lambda (" ++ unwords (map show args) ++ 
+       (case varargs of
+          Nothing -> ""
+          Just arg -> " . " ++ arg) ++ ") ...)"
 
 showLChar :: Char -> String
 showLChar '\n' = "newline"
@@ -223,10 +273,9 @@ showLispList (x:[]) = showVal x
 showLispList (x:xs) = showVal x ++ " " ++ showLispList xs
 --showLispList = unwords . map showVal is their implementation. I did it this way.
 
---more a priori code--
 main :: IO ()
 main = runRepl
---end--
+
 nullEnv :: IO Env
 nullEnv = newIORef []
 
@@ -236,7 +285,7 @@ flushStr str = putStr str >> hFlush stdout
 readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
-runRepl = nullEnv >>= until_ (=="(exit)") (readPrompt "Lisp>>> ") . rep
+runRepl = newEnv >>= until_ (=="(exit)") (readPrompt "Lisp>>> ") . rep
 
 until_ :: Monad m => (a->Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do
