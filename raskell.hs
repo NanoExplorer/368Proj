@@ -48,6 +48,7 @@ eval _ a@(CHARizard _)   = return a
 eval env (Llist [Atom "define", Atom var, value]) = defineVar env var value
 eval env (Llist [Atom "set!", Atom var, value])   = setVar env var value
 eval env (Llist [Atom "quote", val]) = return val
+eval env (Llist [Atom "cond", Llist alts]) = lispCond env alts
 eval env (Llist [Atom "if", pred, conseq, alt]) =
      do result <- eval env pred
         case result of
@@ -76,7 +77,7 @@ primitives = [("+", numericBinop (+)),
               ("string?",oneArg testString),
               ("number?",oneArg testNumber),
               ("char?",oneArg testChar),
-              ("print", oneArg lispPrint), --nyi
+              ("print", oneArg lispPrint),
               ("list", Llist),
               ("cons", lispCons),
               ("null?",oneArg testNull)]
@@ -123,7 +124,7 @@ oneArg :: (LispVal -> LispVal) -> [LispVal] -> LispVal
 oneArg func (x:[]) = func x
 oneArg _ _ = error "Too many arguments"
 
-testSymbol, testString, testNumber, lispPrint :: LispVal -> LispVal
+testSymbol, testString, testNumber :: LispVal -> LispVal
 testSymbol (Atom _) = Lbool True
 testSymbol _ = Lbool False
 
@@ -147,6 +148,17 @@ testNull _ = Lbool False
 testChar :: LispVal -> LispVal
 testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
+
+
+--This lispCond implementation was not totally without the source material
+lispCond :: [LispVal] -> Env -> IO LispVal
+lispCond env ((Llist (Atom "else" : value : [])) : []) = eval value
+lispCond env ((Llist (condition : value : [])) : alts) = do
+     result <- eval condition
+     if (unpackBool result) then eval value
+                   else lispCond alts
+lispCond _ = error "No viable alternative in cond"
+
 
 comparisonOps :: (Integer -> Integer -> Bool) -> [LispVal] -> LispVal
 comparisonOps op [(Number x), (Number y)] = Lbool $ x `op` y
@@ -200,7 +212,6 @@ showVal (Lbool True) = "#t"
 showVal (Lbool False) = "#f"
 showVal (Lfloat x) = show x
 showVal (CHARizard x) = "#\\" ++ showLChar x
-
 
 showLChar :: Char -> String
 showLChar '\n' = "newline"
