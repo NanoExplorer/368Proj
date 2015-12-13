@@ -5,7 +5,7 @@ It was our final project for Programming Languages and Paradigms at the Universi
 
 It has partial support for most of the most useful parts of scheme, including lists, strings, numbers, chars.
 Full feature list:
- * +-*/<> for Integers
+ * `+-*/<>` for Integers
  * also >= and <=
  * equal? 
  * mod, quotient, remainder
