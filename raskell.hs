@@ -27,7 +27,6 @@ import System.Environment
 import Control.Monad
 import Numeric (readInt)
 import Data.Char (digitToInt)
-import Control.Monad.Error
 
 data LispVal = Atom String
              | Llist [LispVal]
@@ -59,11 +58,11 @@ primitives = [("+", numericBinop (+)),
               ("-", numericBinop (-)),
               ("*", numericBinop (*)),
               ("/", numericBinop div),
-              ("<", lispLessThan), --start new functions
-              (">", lispGreaterThan),
-              (">=", lispGtEqTo),
-              ("<=", lispLtEqTo),
-              ("equal?", lispEqualMa), --end new functions
+              ("<", comparisonOps (<)),
+              (">", comparisonOps (>)),
+              (">=", comparisonOps (>=)),
+              ("<=", comparisonOps (<=)),
+              ("equal?", testEqual),
               ("mod", numericBinop mod),
               ("quotient", numericBinop quot),
               ("remainder", numericBinop rem),
@@ -72,11 +71,11 @@ primitives = [("+", numericBinop (+)),
               ("symbol?",oneArg testSymbol),
               ("string?",oneArg testString),
               ("number?",oneArg testNumber),
-              --("char?",oneArg testChar),
+              ("char?",oneArg testChar),
               ("print", oneArg lispPrint),
               ("list", Llist),
               ("cons", lispCons),
-              ("null?", lispNullMa)]
+              ("null?",oneArg testNull)]
 
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
 
@@ -109,27 +108,29 @@ lispCons :: [LispVal] -> LispVal
 lispCons [x, Llist ys] = Llist $ x:ys
 lispCons _ = error "Contract Violation"
 
-lispNullMa :: [LispVal] -> LispVal
-lispNullMa [Llist []] = Lbool True
-lispNullMa _ = Lbool False
+testNull :: LispVal -> LispVal
+testNull (Llist []) = Lbool True
+testNull _ = Lbool False
 
-lispLessThan :: [LispVal] -> LispVal
-lispLessThan [x, y] = Lbool $ (unpackNum x) < (unpackNum y)
+testChar :: LispVal -> LispVal
+testChar (CHARizard _) = Lbool True
+testChar _ = Lbool False
 
-lispGreaterThan :: [LispVal] -> LispVal
-lispGreaterThan [x, y] = Lbool $ (unpackNum x) > (unpackNum y)
+comparisonOps :: (Integer -> Integer -> Bool) -> [LispVal] -> LispVal
+comparisonOps op [(Number x), (Number y)] = Lbool $ x `op` y
+comparisonOps op [_, _] = error "Comparison only available for integers"
+comparisonOps op _ = error "Contract Violation"
 
-lispGtEqTo :: [LispVal] -> LispVal
-lispGtEqTo [x, y] = Lbool $ (unpackNum x) >= (unpackNum y)
-
-lispLtEqTo :: [LispVal] -> LispVal
-lispLtEqTo [x, y] = Lbool $ (unpackNum x) <= (unpackNum y)
-
-lispEqualMa :: [LispVal] -> LispVal
-lispEqualMa [(Number x), (Number y)]         = Lbool $ x == y
-lispEqualMa [(CHARizard x), (CHARizard y)]   = Lbool $ x == y
---lispEqualMa [Llist (x:xs), Llist (y:ys)] = Lbool $ (x == y) && (unpackBool $ lispEqualMa [(Llist xs),(Llist ys)])
-lispEqualMa _ = error "Contract Violation"
+testEqual :: [LispVal] -> LispVal
+testEqual [(Number x), (Number y)]         = Lbool $ (x == y)
+testEqual [(CHARizard x), (CHARizard y)]   = Lbool $ (x == y)
+testEqual [(Lstring x), (Lstring y)]       = Lbool $ (x == y)
+testEqual [(Atom x), (Atom y)]             = Lbool $ (x == y)
+testEqual [(Lbool x), (Lbool y)]           = Lbool $ (x == y)
+testEqual [(Llist []), (Llist [])]         = Lbool True
+testEqual [Llist (x:xs), Llist (y:ys)] = Lbool $ ((unpackBool $ testEqual [x, y]) && (unpackBool $ testEqual [Llist xs, Llist ys]))
+testEqual [_, _] = Lbool False
+testEqual _ = error "Contract Violation"
 
 --END A PRIORI CODE--
 
@@ -144,6 +145,15 @@ unpackNum _ = error "Not a number"
 unpackBool :: LispVal -> Bool
 unpackBool (Lbool b) = b
 unpackBool _ = error "Not a boolean"
+
+unpackChar :: LispVal -> Char
+unpackChar (CHARizard c) = c
+unpackChar _ = error "Not a char"
+
+unpackString :: LispVal -> String
+unpackString (Lstring s) = s
+unpackString (Atom a) = a
+unpackString _ = error "Not a string"
 
 --END A PRIORI CODE: David
 
