@@ -39,12 +39,12 @@ data LispVal = Atom String
 instance Show LispVal where show = showVal
 
 eval :: Env -> LispVal -> IO LispVal
-eval env (Atom id)     = getVar env id
-eval _ a@(Lstring _) = return a
-eval _ a@(Lbool _)   = return a
-eval _ a@(Number _)  = return a
-eval _ a@(Lfloat _)  = return a
-eval _ a@(Lchar _)   = return a
+eval env (Atom id)       = getVar env id
+eval _ a@(Lstring _)     = return a
+eval _ a@(Lbool _)       = return a
+eval _ a@(Number _)      = return a
+eval _ a@(Lfloat _)      = return a
+eval _ a@(CHARizard _)   = return a
 eval env (Llist [Atom "define", Atom var, value]) = defineVar env var value
 eval env (Llist [Atom "set!", Atom var, value])   = setVar env var value
 eval env (Llist [Atom "quote", val]) = return val
