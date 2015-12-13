@@ -1,4 +1,7 @@
--- Parsec is kind of hard to get the hang of. So far most of this entire file has come straight from the wikibooks on Write Yourself a Scheme
+-- Parsec is kind of hard to get the hang of. So most of the functions that 
+-- use parsec are heavily guided by the wikibook:
+-- I tried to do the exercises at least for the first two or three chapters
+-- without looking at the answers.
 -- https://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours/Answers
 
 {-
@@ -15,19 +18,14 @@ Prelude> sequence_ [print i | i <- [1..10]]
 10
 Prelude> 
 
-
-
-Things implemented: *+-/ car cdr
-all of the lispval primitives but dottedlist, in show and eval
-
-
 -}
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
+import System.IO
 import Control.Monad
 import Numeric (readInt)
 import Data.Char (digitToInt)
-import Control.Monad.Error
+import Data.IORef
 
 data LispVal = Atom String
              | Llist [LispVal]
@@ -40,17 +38,22 @@ data LispVal = Atom String
 
 instance Show LispVal where show = showVal
 
-eval :: LispVal -> LispVal
-eval a@(Atom _)    = a
-eval a@(Lstring _) = a
-eval a@(Lbool _)   = a
-eval a@(Number _)  = a
-eval a@(Lfloat _)  = a
-eval a@(Lchar _)   = a
-eval (Llist [Atom "quote", val]) = val
-eval (Llist (Atom fun:args)) = apply fun $ map eval args
-
-
+eval :: Env -> LispVal -> IO LispVal
+eval env (Atom id)     = getVar env id
+eval _ a@(Lstring _) = return a
+eval _ a@(Lbool _)   = return a
+eval _ a@(Number _)  = return a
+eval _ a@(Lfloat _)  = return a
+eval _ a@(Lchar _)   = return a
+eval env (Llist [Atom "define", Atom var, value]) = defineVar env var value
+eval env (Llist [Atom "set!", Atom var, value])   = setVar env var value
+eval env (Llist [Atom "quote", val]) = return val
+eval env (Llist [Atom "if", pred, conseq, alt]) =
+     do result <- eval env pred
+        case result of
+          Lbool False -> eval env alt
+          otherwise -> eval env conseq
+eval env (Llist (Atom fun:args)) = mapM (eval env) args >>= \x -> return (apply fun x)
 apply :: String -> [LispVal] -> LispVal
 apply func args = maybe (error $ func ++ " is not a procedure") ($ args) $ lookup func primitives
 
@@ -73,12 +76,40 @@ primitives = [("+", numericBinop (+)),
               ("string?",oneArg testString),
               ("number?",oneArg testNumber),
               --("char?",oneArg testChar),
-              ("print", oneArg lispPrint),
+              ("print", oneArg lispPrint), --nyi
               ("list", Llist),
               ("cons", lispCons),
               ("null?", lispNullMa)]
 
+type Env = IORef [(String, IORef LispVal)] --maps strings (variable names) to a "mutable-ish" LispVal
+setVar :: Env -> String -> LispVal -> IO LispVal 
+setVar envRef var value = do env <- readIORef envRef
+                             maybe (error "Set an unbound variable")
+                                   (flip writeIORef value)
+                                   (lookup var env)
+                             return value
+--So the IO LispVal that this function spits out is just the LispVal that you put in.
+
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
+
+varExists :: Env -> String -> IO Bool
+varExists env name = readIORef env >>= return . maybe False (const True) . lookup name
+--here I got the const function from the wikibook. Apparently it makes any value into a function that takes one
+--argument and always returns that value -> const = \x y -> x so (const True) = \y -> True
+
+getVar :: Env -> String -> IO LispVal
+getVar env name = readIORef env >>=  maybe (error "No such variable") (readIORef) . lookup name
+--I got the liftIO part from the textbook
+
+--Based heavily on setVar, but without looking at recommended defineVar definitions
+defineVar :: Env -> String -> LispVal -> IO LispVal --I got the type signature from the book
+defineVar envRef name value = do env <- readIORef envRef
+                                 maybe (do newRef <- newIORef value
+                                           modifyIORef envRef ((name, newRef):))
+                                       (flip writeIORef value)
+                                       (lookup name env)
+                                 return value
+         
 
 lispCar :: [LispVal] -> LispVal
 lispCar ((Llist (x:xs)):[]) = x
@@ -102,7 +133,7 @@ testString _ = Lbool False
 testNumber (Number _) = Lbool True
 testNumber _ = Lbool False
 
-lispPrint s = Lstring (showVal s)
+lispPrint s = Lstring (showVal s) --not really implemented
 
 --A PRIORI CODE (David)--
 lispCons :: [LispVal] -> LispVal
@@ -133,6 +164,7 @@ lispEqualMa [_, _] = Lbool False --temporary fix to compile
 
 --END A PRIORI CODE--
 
+
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
 numericBinop op params = Number $ foldl1 op $ map unpackNum params
 
@@ -143,7 +175,7 @@ unpackNum _ = error "Not a number"
 showVal :: LispVal -> String
 showVal (Atom x) = x
 showVal (Llist x) = "(" ++ (showLispList x) ++ ")"
-showVal (DottedList head tail) = "(" ++ showLispList head ++ "." ++ showVal tail ")"
+showVal (DottedList head tail) = "(" ++ showLispList head ++ "." ++ showVal tail ++ ")"
 showVal (Number x) = show x
 showVal (Lstring x) = "\"" ++ x ++ "\""
 showVal (Lbool True) = "#t"
@@ -164,14 +196,28 @@ showLispList (x:xs) = showVal x ++ " " ++ showLispList xs
 
 --more a priori code--
 main :: IO ()
-main = do x <- getLine
-          if x == "(exit)"
-              then putStrLn "Exiting."
-              else rep x >> main
+main = runRepl
 --end--
+nullEnv :: IO Env
+nullEnv = newIORef []
 
-rep :: String -> IO()
-rep = print . eval . readExpr 
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
+
+readPrompt :: String -> IO String
+readPrompt prompt = flushStr prompt >> getLine
+
+runRepl = nullEnv >>= until_ (=="(exit)") (readPrompt "Lisp>>> ") . rep
+
+until_ :: Monad m => (a->Bool) -> m a -> (a -> m ()) -> m ()
+until_ pred prompt action = do
+  result <- prompt
+  if pred result
+     then return()
+     else action result >> until_ pred prompt action
+
+rep :: Env -> String -> IO()
+rep env command = liftM show (eval env $ readExpr command) >>= putStrLn
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
