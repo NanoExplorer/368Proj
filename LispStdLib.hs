@@ -97,8 +97,7 @@ testChar :: LispVal -> LispVal
 testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
 
-
---This lispCond implementation was not totally without the source material !!!!!!!!!!!!
+--This lispCond implementation was based loosely on some material from the book
 lispCond :: Env -> [LispVal] -> IO LispVal
 lispCond env ((Llist (Atom "else" : value : [])) : []) = eval env value
 lispCond env ((Llist (condition : value : [])) : alts) = do
@@ -106,7 +105,6 @@ lispCond env ((Llist (condition : value : [])) : alts) = do
      if (unpackBool result) then eval env value
                    else lispCond env alts
 lispCond _ _ = error "No viable alternative in cond"
-
 
 comparisonOps :: (Integer -> Integer -> Bool) -> [LispVal] -> LispVal
 comparisonOps op [(Number x), (Number y)] = Lbool $ x `op` y
