@@ -4,21 +4,7 @@
 -- without looking at the answers.
 -- https://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours/Answers
 
-{-
-Prelude> sequence_ [print i | i <- [1..10]]
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-Prelude> 
 
--}
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
 import System.IO
@@ -194,7 +180,7 @@ testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
 
 
---This lispCond implementation was not totally without the source material !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+--This lispCond implementation was based loosely on some source material from the book
 lispCond :: Env -> [LispVal] -> IO LispVal
 lispCond env ((Llist (Atom "else" : value : [])) : []) = eval env value
 lispCond env ((Llist (condition : value : [])) : alts) = do
@@ -230,7 +216,7 @@ unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
 unpackNum _ = error "Not a number"
 
---BEGIN A PRIORI CODE: David
+--BEGIN more A PRIORI CODE: David
 unpackBool :: LispVal -> Bool
 unpackBool (Lbool b) = b
 unpackBool _ = error "Not a boolean"
@@ -405,10 +391,3 @@ parseQuoted = do
   x <- parseExpr
   return $ Llist [Atom "quote", x]
 
-{-
-(cons 'a '(a b c))
-(a a b c)
-
-(cons '(a b c) 'a)
-((a b c) . a)
--}
