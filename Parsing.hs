@@ -3,6 +3,7 @@ module Parsing where
 import Text.ParserCombinators.Parsec hiding (spaces)
 import LispDefs
 import Control.Monad
+
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
@@ -83,7 +84,6 @@ parseNumber' = do
 
 parseNumber'' :: Parser LispVal
 parseNumber'' = (many1 digit) >>= \x -> (return . Number . read) x
-
 
 parseList :: Parser LispVal
 parseList = liftM Llist $ sepBy parseExpr spaces

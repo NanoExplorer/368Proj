@@ -1,3 +1,52 @@
+module LispStdLib where
+import Control.Monad
+import LispDefs
+import Numeric (readInt)
+import Data.Char (digitToInt)
+import Data.IORef
+
+eval :: Env -> LispVal -> IO LispVal
+eval env (Atom id)       = getVar env id
+eval _ a@(Lstring _)     = return a
+eval _ a@(Lbool _)       = return a
+eval _ a@(Number _)      = return a
+eval _ a@(Lfloat _)      = return a
+eval _ a@(CHARizard _)   = return a
+eval env (Llist [Atom "define", Atom var, value]) = eval env value >>= defineVar env var 
+eval env (Llist [Atom "set!", Atom var, value])   = eval env value >>= setVar env var 
+eval env (Llist [Atom "quote", val]) = return val
+eval env (Llist (Atom "cond" : alts)) = lispCond env alts
+eval env (Llist [Atom "if", pred, conseq, alt]) =
+     do result <- eval env pred
+        case result of
+          Lbool False -> eval env alt
+          otherwise -> eval env conseq
+eval env (Llist (Atom "lambda" : Llist params : funbody)) = return $ Func (map showVal params) Nothing funbody env
+eval env (Llist (fun:args)) = do 
+        func <- eval env fun
+        argVals <- mapM (eval env) args 
+        apply func argVals
+
+apply :: LispVal -> [LispVal] -> IO LispVal
+apply (PrimitiveFunc func) args = return $ func args
+apply (Func params varargs body closure) args = 
+      if num params /= num args && varargs == Nothing
+         then error "Wrong number of arguments"
+         else bindVars closure (zip params args) >>= bindVarArgs varargs >>= evalBody
+      where remainingArgs = drop (length params) args
+            num = toInteger . length
+            evalBody env = liftM last $ mapM (eval env) body
+            bindVarArgs arg env = case arg of
+                                    Just argName -> bindVars env [(argName, Llist $ remainingArgs)]
+                                    Nothing -> return env
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op params = Number $ foldl1 op $ map unpackNum params
+
+unpackNum :: LispVal -> Integer 
+unpackNum (Number n) = n
+unpackNum _ = error "Not a number"
+
 --A PRIORI CODE (code that I didn't get from the website, I made myself (Christopher))--
 
 testList, stringlist, liststring :: LispVal -> LispVal
@@ -9,29 +58,7 @@ stringlist (Lstring x) = Llist $ map CHARizard x
 stringlist _ = error "contract violation"
 
 liststring (Llist x) = Lstring $ map unpackChar x
-liststring _ = error "contract violation"
-
-varExists :: Env -> String -> IO Bool
-varExists env name = readIORef env >>= return . maybe False (const True) . lookup name
---here I got the const function from the wikibook. Apparently it makes any value into a function that takes one
---argument and always returns that value -> const = \x y -> x so (const True) = \y -> True
-
-getVar :: Env -> String -> IO LispVal
-getVar env name = readIORef env >>=  maybe (error $ "No such variable" ++ name) (readIORef) . lookup name
-
-
---Based heavily on setVar, but without looking at recommended defineVar definitions
-defineVar :: Env -> String -> LispVal -> IO LispVal --I got the type signature from the book
-defineVar envRef name value = do env <- readIORef envRef
-                                 maybe (do newRef <- newIORef value
-                                           modifyIORef envRef ((name, newRef):))
-                                       (flip writeIORef value)
-                                       (lookup name env)
-                                 return value
-newEnv :: IO Env
-newEnv = do x <- nullEnv
-            bindVars x $ map (\(x, y) -> (x, PrimitiveFunc y)) primitives
-          
+liststring _ = error "contract violation"          
 
 lispCar :: [LispVal] -> LispVal
 lispCar ((Llist (x:xs)):[]) = x
@@ -71,7 +98,7 @@ testChar (CHARizard _) = Lbool True
 testChar _ = Lbool False
 
 
---This lispCond implementation was not totally without the source material !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+--This lispCond implementation was not totally without the source material !!!!!!!!!!!!
 lispCond :: Env -> [LispVal] -> IO LispVal
 lispCond env ((Llist (Atom "else" : value : [])) : []) = eval env value
 lispCond env ((Llist (condition : value : [])) : alts) = do
@@ -97,7 +124,6 @@ testEqual [Llist (x:xs), Llist (y:ys)] = Lbool $ ((unpackBool $ testEqual [x, y]
 testEqual [_, _] = Lbool False
 testEqual _ = error "Contract Violation"
 
---MORE A PRIORI CODE: David
 unpackBool :: LispVal -> Bool
 unpackBool (Lbool b) = b
 unpackBool _ = error "Not a boolean"
