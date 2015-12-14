@@ -13,7 +13,7 @@ or
 ./rli example_scheme/hw3.rsk
 (timesdepth* 1 '(1 2 3 4 (1 2 3 4 (1 2 3 4))))
 ```
-(timesdepth was a previous homework in our class, so we chose it as the test for completeness.
+(timesdepth was a previous homework in our class, so we chose it as the test for completeness.)
 
 It has partial support for most of the most useful parts of scheme, including lists, strings, numbers, chars.
 Full feature list:
