@@ -3,6 +3,18 @@ Raskell is a racket/scheme interpreter written in Haskell!
 
 It was our final project for Programming Languages and Paradigms at the University of Kansas.
 
+To see a quick demonstration, pull this repo, compile with `make`, then run one of the following:
+```
+./rli example_scheme/disemvowel.rsk
+(disemvowel "Some Words Here")
+```
+or
+```
+./rli example_scheme/hw3.rsk
+(timesdepth* 1 '(1 2 3 4 (1 2 3 4 (1 2 3 4))))
+```
+(timesdepth was a previous homework in our class, so we chose it as the test for completeness.
+
 It has partial support for most of the most useful parts of scheme, including lists, strings, numbers, chars.
 Full feature list:
  * `+-*/<>` for Integers
