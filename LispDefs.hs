@@ -47,7 +47,7 @@ showLChar ' '  = "space"
 showLChar x = [x]
 
 showLispList :: [LispVal] -> String
-showLispList [] = "()"
+showLispList [] = ""
 showLispList (x:[]) = showVal x
 showLispList (x:xs) = showVal x ++ " " ++ showLispList xs
 --showLispList = unwords . map showVal is their implementation. I did it this way.
